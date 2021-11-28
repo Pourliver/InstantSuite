@@ -10,9 +10,9 @@ public:
 
 private:
 	void pluginEnabledChanged();
-	void launchTraining(ServerWrapper caller, void* params, string eventName);
-	void queue(ServerWrapper caller, void* params, string eventName);
-	void exitGame(ServerWrapper caller, void* params, string eventName);
+	void launchTraining(ServerWrapper caller, void* params, std::string eventName);
+	void queue(ServerWrapper caller, void* params, std::string eventName);
+	void exitGame(ServerWrapper caller, void* params, std::string eventName);
 	void delayedQueue ();
 	void delayedTraining();
 	void delayedExit();
@@ -20,17 +20,19 @@ private:
 	void hookMatchEnded();
 	void unhookMatchEnded();
 	void logHookType(const char* const hookType) const;
-	void onMatchEnd(ServerWrapper server, void* params, string eventName);
+	void onMatchEnd(ServerWrapper server, void* params, std::string eventName);
 
 private:
 	static constexpr const char* matchEndedEvent = "Function TAGame.GameEvent_Soccar_TA.EventMatchEnded";
 	static constexpr const char* enabledCvarName = "instant_suite_enabled";
 
 	static constexpr const char* trainingCvarName = "instant_training_enabled";
+	static constexpr const char* customTrainingCvarName = "instant_custom_training_enabled";
 	static constexpr const char* queueCvarName = "instant_queue_enabled";
 	static constexpr const char* exitCvarName = "instant_exit_enabled";
 
 	static constexpr const char* trainingMapCvarName = "instant_training_map";
+	static constexpr const char* customTrainingCodeCvarName = "instant_custom_training_code";
 
 	static constexpr const char* tDelayCvarName = "instant_training_delay";
 	static constexpr const char* qDelayCvarName = "instant_queue_delay";

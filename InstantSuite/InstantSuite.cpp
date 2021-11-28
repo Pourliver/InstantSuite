@@ -1,7 +1,7 @@
 #include "InstantSuite.h"
 #include <sstream>
 
-BAKKESMOD_PLUGIN(InstantSuite, "InstantSuite", "1.0.2", PLUGINTYPE_FREEPLAY)
+BAKKESMOD_PLUGIN(InstantSuite, "InstantSuite fork", "1.0.3", PLUGINTYPE_FREEPLAY)
 
 enum Mode
 {
@@ -28,6 +28,7 @@ void InstantSuite::onLoad()
 	cvarManager->registerCvar(enabledCvarName, "1", "Determines whether Instant Suite is enabled.").addOnValueChanged(std::bind(&InstantSuite::pluginEnabledChanged, this));
 
 	cvarManager->registerCvar(trainingCvarName, "1", "Instantly jump into training at end of match.");
+	cvarManager->registerCvar(customTrainingCvarName, "0", "Instantly jump into a custom training pack at end of match.");
 	cvarManager->registerCvar(queueCvarName, "0", "Instantly queue for previously selected playlists at end of match.");
 	cvarManager->registerCvar(exitCvarName, "0", "Instantly exit to main menu instead of training at end of match.");
 
@@ -36,6 +37,7 @@ void InstantSuite::onLoad()
 	cvarManager->registerCvar(qDelayCvarName, "0", "Seconds to wait before starting queue.");
 
 	cvarManager->registerCvar(trainingMapCvarName, "EuroStadium_Night_P", "Determines the map that will launch for training.");
+	cvarManager->registerCvar(customTrainingCodeCvarName, "", "Determines the custom training pack that will launch.");
 	cvarManager->registerCvar(disableCasualQCvarName, "0", "Don't automatically queue when ending a casual game.");
 	cvarManager->registerCvar(disableCasualTCvarName, "0", "Don't automatically go to training when ending a casual game.");
 	cvarManager->registerCvar(disableCasualECvarName, "0", "Don't automatically exit when ending a casual game.");
@@ -77,7 +79,7 @@ void InstantSuite::removeOldPlugin() { // disable deprecated predecessor plugin 
 	cvarManager->executeCommand("writeplugins");
 }
 
-void InstantSuite::launchTraining(ServerWrapper server, void* params, string eventName)
+void InstantSuite::launchTraining(ServerWrapper server, void* params, std::string eventName)
 {
 	float totalTrainingDelayTime = 0;
 	float trainingDelayTime = cvarManager->getCvar(tDelayCvarName).getFloatValue();
@@ -100,14 +102,11 @@ void InstantSuite::launchTraining(ServerWrapper server, void* params, string eve
 		if (playlist == CasualChaos || playlist == CasualDoubles || playlist == CasualDuel || playlist == CasualStandard) {
 			return;
 		}
-		else {
-			gameWrapper->SetTimeout(std::bind(&InstantSuite::delayedTraining, this), totalTrainingDelayTime);
-		}
 	}
 	gameWrapper->SetTimeout(std::bind(&InstantSuite::delayedTraining, this), totalTrainingDelayTime);
 }
 
-void InstantSuite::exitGame(ServerWrapper server, void* params, string eventName)
+void InstantSuite::exitGame(ServerWrapper server, void* params, std::string eventName)
 {
 	float totalExitDelayTime = 0;
 	float exitDelayTime = cvarManager->getCvar(eDelayCvarName).getFloatValue();
@@ -131,14 +130,11 @@ void InstantSuite::exitGame(ServerWrapper server, void* params, string eventName
 		if (playlist == CasualChaos || playlist == CasualDoubles || playlist == CasualDuel || playlist == CasualStandard) {
 			//return;
 		}
-		else {
-			gameWrapper->SetTimeout(std::bind(&InstantSuite::delayedExit, this), totalExitDelayTime);
-		}
 	}
 	gameWrapper->SetTimeout(std::bind(&InstantSuite::delayedExit, this), totalExitDelayTime);
 }
 
-void InstantSuite::queue(ServerWrapper server, void* params, string eventName)
+void InstantSuite::queue(ServerWrapper server, void* params, std::string eventName)
 {
 	float totalQueueDelayTime = 0;
 	float queueDelayTime = cvarManager->getCvar(qDelayCvarName).getFloatValue();
@@ -160,9 +156,6 @@ void InstantSuite::queue(ServerWrapper server, void* params, string eventName)
 
 		if (playlist == CasualChaos || playlist == CasualDoubles || playlist == CasualDuel || playlist == CasualStandard) {
 			return;
-		}
-		else {
-			gameWrapper->SetTimeout(std::bind(&InstantSuite::delayedQueue, this), totalQueueDelayTime);
 		}
 	}
 	gameWrapper->SetTimeout(std::bind(&InstantSuite::delayedQueue, this), totalQueueDelayTime);
@@ -188,12 +181,20 @@ void InstantSuite::delayedQueue()
 void InstantSuite::delayedTraining()
 {
 	std::stringstream launchTrainingCommandBuilder;
-	std::string mapname = cvarManager->getCvar(trainingMapCvarName).getStringValue();
-	if (mapname.compare("random") == 0)
-	{
-		mapname = gameWrapper->GetRandomMap();
+	std::string trainingMapName = cvarManager->getCvar(trainingMapCvarName).getStringValue();
+	std::string customTrainingCode = cvarManager->getCvar(customTrainingCodeCvarName).getStringValue();
+	bool customTrainingEnabled = cvarManager->getCvar(customTrainingCvarName).getBoolValue();
+	
+	if (customTrainingEnabled) {
+		launchTrainingCommandBuilder << "load_training " << customTrainingCode;;
+	} else {
+		if (trainingMapName.compare("random") == 0)
+		{
+			trainingMapName = gameWrapper->GetRandomMap();
+		}
+		launchTrainingCommandBuilder << "start " << trainingMapName << "?Game=TAGame.GameInfo_Tutorial_TA?GameTags=Freeplay";
 	}
-	launchTrainingCommandBuilder << "start " << mapname << "?Game=TAGame.GameInfo_Tutorial_TA?GameTags=Freeplay";
+
 
 	const std::string launchTrainingCommand = launchTrainingCommandBuilder.str();
 
@@ -209,7 +210,11 @@ void InstantSuite::delayedTraining()
 		}
 	}
 
-	gameWrapper->ExecuteUnrealCommand(launchTrainingCommand);
+	if (customTrainingEnabled) {
+		cvarManager->executeCommand(launchTrainingCommand);
+	} else {
+		gameWrapper->ExecuteUnrealCommand(launchTrainingCommand); // Can also be launched via executeCommand("load_freeplay mapname")
+	}
 }
 
 void InstantSuite::delayedExit()
@@ -229,7 +234,7 @@ void InstantSuite::delayedExit()
 	cvarManager->executeCommand("unreal_command disconnect");
 }
 
-void InstantSuite::onMatchEnd(ServerWrapper server, void* params, string eventName)
+void InstantSuite::onMatchEnd(ServerWrapper server, void* params, std::string eventName)
 {
 	const bool exitEnabled = cvarManager->getCvar(exitCvarName).getBoolValue();
 	const bool queueEnabled = cvarManager->getCvar(queueCvarName).getBoolValue();
@@ -250,7 +255,7 @@ void InstantSuite::onMatchEnd(ServerWrapper server, void* params, string eventNa
 
 void InstantSuite::hookMatchEnded()
 {
-	gameWrapper->HookEventWithCaller<ServerWrapper>(matchEndedEvent, std::bind(&InstantSuite::onMatchEnd, this, placeholders::_1, placeholders::_2,	placeholders::_3));
+	gameWrapper->HookEventWithCaller<ServerWrapper>(matchEndedEvent, std::bind(&InstantSuite::onMatchEnd, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	hooked = true;
 	logHookType("Hooked");
 }
